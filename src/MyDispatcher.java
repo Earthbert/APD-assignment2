@@ -36,11 +36,11 @@ public class MyDispatcher extends Dispatcher {
     }
 
     private void addTask_LWL(Task task) {
-        hosts.stream().min(Comparator.comparing(Host::getWorkLeft)).get().addTask(task);
+        hosts.stream().min(Comparator.comparing(Host::getWorkLeft).thenComparing(Host::getId)).get().addTask(task);
     }
 
     private void addTask_SQ(Task task) {
-        hosts.stream().min(Comparator.comparing(Host::getQueueSize)).get().addTask(task);
+        hosts.stream().min(Comparator.comparing(Host::getQueueSize).thenComparing(Host::getId)).get().addTask(task);
     }
 
     private void addTask_SITA(Task task) {

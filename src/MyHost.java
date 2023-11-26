@@ -4,10 +4,14 @@ import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
 
 public class MyHost extends Host {
-    private PriorityBlockingQueue<Task> queue = new PriorityBlockingQueue<>(10, Comparator.comparing(Task::getPriority));
+    private PriorityBlockingQueue<Task> queue = new PriorityBlockingQueue<>(10,
+            Comparator.comparing(Task::getPriority).reversed().thenComparing(Task::getId));
     private Task runningTask = null;
 
     private boolean isShutdown = false;
+
+    private boolean isInRunningState = false;
+    private boolean interogateRunningTask = false;
 
     @Override
     public void run() {
@@ -17,9 +21,10 @@ public class MyHost extends Host {
             }
             if (runningTask == null) {
                 try {
-                    this.wait();
+                    synchronized (this) {
+                        this.wait();
+                    }
                 } catch (InterruptedException e) {
-                    System.exit(1);
                     e.printStackTrace();
                 }
                 runningTask = queue.poll();
@@ -35,45 +40,84 @@ public class MyHost extends Host {
             return;
         }
         queue.add(task);
-        this.notify();
+        synchronized (this) {
+            this.notify();
+        }
     }
 
     @Override
     public int getQueueSize() {
-        return runningTask == null ? queue.size() : queue.size() + 1; 
+        return runningTask == null ? queue.size() : queue.size() + 1;
     }
 
     @Override
     public long getWorkLeft() {
-        return queue.stream().mapToLong(Task::getLeft).sum();
+        long workLeft = queue.stream().mapToLong(Task::getLeft).sum();
+        if (!isInRunningState)
+            return runningTask == null ? workLeft : workLeft + runningTask.getLeft();
+
+        interogateRunningTask = true;
+        synchronized (this) {
+            this.notify();
+        }
+        synchronized (this) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        return workLeft + runningTask.getLeft();
     }
 
     @Override
     public void shutdown() {
         queue.clear();
-        this.notify();
+        synchronized (this) {
+            this.notify();
+        }
         isShutdown = true;
     }
 
     private void runTask(Task task) {
-        long currentTime = System.currentTimeMillis();
+        do {
+            if (task.getLeft() <= 0) {
+                task.finish();
+                runningTask = queue.poll();
+                return;
+            }
 
-        try {
-            this.wait(task.getLeft(), 0);
-        } catch (InterruptedException e) {
-            System.exit(1);
-            e.printStackTrace();
-        }
+            long currentTime = System.currentTimeMillis();
 
-        long elapsedTime = System.currentTimeMillis() - currentTime;
+            try {
+                synchronized (this) {
+                    isInRunningState = true;
+                    this.wait(task.getLeft());
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
 
-        task.setLeft(task.getLeft() - elapsedTime);
+            long elapsedTime = System.currentTimeMillis() - currentTime;
+
+            task.setLeft(task.getLeft() - elapsedTime);
+
+            if (interogateRunningTask) {
+                synchronized (this) {
+                    this.notify();
+                }
+            }
+
+            isInRunningState = false;
+        } while (!task.isPreemptible() && isShutdown == false);
 
         if (task.getLeft() <= 0) {
             task.finish();
             runningTask = queue.poll();
             return;
-        } else
+        } else {
             queue.add(runningTask);
+            runningTask = queue.poll();
+        }
     }
 }
