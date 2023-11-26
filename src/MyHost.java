@@ -79,6 +79,11 @@ public class MyHost extends Host {
         isShutdown = true;
     }
 
+    /**
+     * Runs a task until it is completed or preempted.
+     * 
+     * @param task The task to be executed.
+     */
     private void runTask(Task task) {
         do {
             if (task.getLeft() <= 0) {
