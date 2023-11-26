@@ -19,19 +19,22 @@ public class MyHost extends Host {
             if (isShutdown) {
                 return;
             }
-            if (runningTask == null) {
-                try {
-                    synchronized (this) {
+            synchronized (this) {
+                if (runningTask == null) {
+                    try {
                         this.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    runningTask = queue.poll();
                 }
-                runningTask = queue.poll();
-            } else {
+            }
+
+            if (runningTask != null) {
                 runTask(runningTask);
             }
         }
+
     }
 
     @Override
@@ -39,8 +42,8 @@ public class MyHost extends Host {
         if (isShutdown) {
             return;
         }
-        queue.add(task);
         synchronized (this) {
+            queue.add(task);
             this.notify();
         }
     }
@@ -67,7 +70,7 @@ public class MyHost extends Host {
                 e.printStackTrace();
             }
         }
-        return workLeft + runningTask.getLeft();
+        return runningTask == null ? workLeft : workLeft + runningTask.getLeft();
     }
 
     @Override
@@ -92,7 +95,7 @@ public class MyHost extends Host {
                 return;
             }
 
-            long currentTime = System.currentTimeMillis();
+            long currentTime = System.nanoTime() / 1_000_000;
 
             try {
                 synchronized (this) {
@@ -103,7 +106,7 @@ public class MyHost extends Host {
                 e.printStackTrace();
             }
 
-            long elapsedTime = System.currentTimeMillis() - currentTime;
+            long elapsedTime = (System.nanoTime() / 1_000_000) - currentTime;
 
             task.setLeft(task.getLeft() - elapsedTime);
 
@@ -121,8 +124,10 @@ public class MyHost extends Host {
             runningTask = queue.poll();
             return;
         } else {
-            queue.add(runningTask);
-            runningTask = queue.poll();
+            if (queue.peek() != null && queue.peek().getPriority() > task.getPriority()) {
+                queue.add(runningTask);
+                runningTask = queue.poll();
+            }
         }
     }
 }
