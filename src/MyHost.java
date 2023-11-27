@@ -5,7 +5,7 @@ import java.util.concurrent.PriorityBlockingQueue;
 
 public class MyHost extends Host {
     private PriorityBlockingQueue<Task> queue = new PriorityBlockingQueue<>(10,
-            Comparator.comparing(Task::getPriority).reversed().thenComparing(Task::getId));
+            Comparator.comparing(Task::getPriority).reversed().thenComparing(Task::getStart));
     private Task runningTask = null;
 
     private boolean isShutdown = false;
